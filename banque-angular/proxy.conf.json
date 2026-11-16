@@ -1,0 +1,6 @@
+{
+  "/api/java/**": { "target": "http://127.0.0.1:8101", "secure": false },
+  "/api/python/**": { "target": "http://127.0.0.1:8102", "secure": false },
+  "/api/php/**": { "target": "http://127.0.0.1:8103", "secure": false },
+  "/api/js/**": { "target": "http://127.0.0.1:8104", "secure": false }
+}

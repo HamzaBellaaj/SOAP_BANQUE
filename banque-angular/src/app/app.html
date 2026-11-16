@@ -1,0 +1,90 @@
+<header class="header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Accueil banq"><span class="brand-icon"><app-icon name="bank" /></span>banq<span>.</span></a>
+    <span class="project-label">Projet Banque SOAP</span>
+  </div>
+</header>
+
+<main>
+  <div class="page-heading">
+    <div><h1>Gestion des comptes</h1><p>Choisissez un langage, puis effectuez vos opérations.</p></div>
+    <button class="button primary" (click)="open('creerCompte')" [disabled]="busy"><app-icon name="plus" />Nouveau compte</button>
+  </div>
+
+  <section class="consumer-panel" aria-labelledby="consumer-heading">
+    <div class="consumer-label"><h2 id="consumer-heading">Consommateur SOAP</h2><p>Les mêmes comptes avec les quatre langages.</p></div>
+    <div class="consumer-options" role="group" aria-label="Choisir le langage">
+      @for (consumer of consommateurs; track consumer.id) {
+        <button [class.selected]="selected === consumer.id" [attr.aria-pressed]="selected === consumer.id" [disabled]="busy" (click)="selectConsumer(consumer.id)">
+          <span>{{ consumer.name }}</span><i class="status-dot" [class.online]="statuses[consumer.id] === 'online'" [class.checking]="statuses[consumer.id] === 'checking'"></i>
+          <span class="sr-only">{{ statuses[consumer.id] === 'online' ? 'connecté' : statuses[consumer.id] === 'checking' ? 'vérification en cours' : 'indisponible' }}</span>
+        </button>
+      }
+    </div>
+  </section>
+
+  @if (connectionError) {
+    <div class="connection-alert" role="alert"><app-icon name="alert" /><p>{{ connectionError }}</p><button class="button secondary" [disabled]="loading" (click)="loadAccounts(); refreshConnections()">Réessayer</button></div>
+  }
+
+  <div class="workspace">
+    <section class="accounts-panel panel" aria-labelledby="accounts-heading">
+      <div class="panel-heading"><div><h2 id="accounts-heading">Comptes <span class="count">{{ comptes.length }}</span></h2><p>@if (loading) { Chargement… } @else if (!connectionError) { Total : <strong>{{ money(total) }} TND</strong> }</p></div><button class="button secondary small" (click)="loadAccounts()" [disabled]="loading || busy"><app-icon name="refresh" [class.spinning]="loading" />Actualiser</button></div>
+      <label class="search-field"><app-icon name="search" /><input type="search" aria-label="Rechercher un compte" placeholder="Rechercher par numéro…" [(ngModel)]="search" (ngModelChange)="page = 1" /></label>
+      <div class="table-wrapper"><table><thead><tr><th>Compte</th><th class="amount">Solde (TND)</th><th class="action">Action</th></tr></thead><tbody>
+        @if (loading) { <tr><td colspan="3" class="table-message">Chargement des comptes…</td></tr> }
+        @else {
+          @for (compte of visibleAccounts; track compte.numCompte) {
+            <tr [class.chosen]="form.code === compte.numCompte"><td><button class="account-link" (click)="open('getCompte', compte.numCompte)" [disabled]="busy">Compte n° {{ compte.numCompte }}</button><small>Créé le {{ date(compte.dateCreation) }}</small></td><td class="amount balance">{{ money(compte.solde) }}</td><td class="action"><button class="manage-button" (click)="open('verser', compte.numCompte)" [disabled]="busy" [attr.aria-label]="'Gérer le compte ' + compte.numCompte">Gérer<app-icon name="arrow" /></button></td></tr>
+          } @empty {
+            <tr><td colspan="3"><div class="empty-state"><app-icon [name]="search ? 'search' : 'wallet'" /><h3>{{ connectionError ? 'Connexion indisponible' : search ? 'Aucun compte trouvé' : 'Aucun compte pour le moment' }}</h3><p>{{ connectionError ? 'Réessayez quand le service est démarré.' : search ? 'Essayez un autre numéro.' : 'Utilisez le formulaire pour créer votre premier compte.' }}</p></div></td></tr>
+          }
+        }
+      </tbody></table></div>
+      <div class="table-footer"><span>{{ filtered.length }} résultat{{ filtered.length > 1 ? 's' : '' }}</span>@if (pageCount > 1) { <div class="pagination"><button class="button secondary small" [disabled]="page <= 1" (click)="page = page - 1">Précédent</button><span>{{ page }} / {{ pageCount }}</span><button class="button secondary small" [disabled]="page >= pageCount" (click)="page = page + 1">Suivant</button></div> }</div>
+    </section>
+
+    <section #operationPanel class="operation-panel panel" aria-labelledby="operation-heading">
+      <div class="panel-heading"><div><h2 id="operation-heading">Effectuer une opération</h2><p>Consommateur utilisé : <strong>{{ consumer.name }}</strong></p></div></div>
+      <form #operationForm="ngForm" (ngSubmit)="submit()">
+        <label for="operation">Opération</label>
+        <select id="operation" name="operation" [(ngModel)]="operation" (ngModelChange)="changeOperation()" [disabled]="busy">@for (op of operations; track op.id) { <option [value]="op.id">{{ op.label }}</option> }</select>
+        <p class="field-help">{{ info.description }}</p>
+
+        @if (operation !== 'creerCompte' && operation !== 'conversion') {
+          <label for="account-code">{{ operation === 'virement' ? 'Compte source' : 'Compte' }}</label>
+          <select id="account-code" class="first-field" name="code" required [(ngModel)]="form.code" (ngModelChange)="clearFeedback()" [disabled]="busy || loading">
+            <option [ngValue]="null" disabled>Choisir un compte</option>
+            @for (compte of comptes; track compte.numCompte) { <option [ngValue]="compte.numCompte">N° {{ compte.numCompte }} — {{ money(compte.solde) }} TND</option> }
+          </select>
+          @if (selectedAccount; as compte) { <p class="field-help">Solde disponible : <strong>{{ money(compte.solde) }} TND</strong></p> }
+        }
+
+        @if (operation === 'virement') {
+          <label for="destination-code">Compte destination</label>
+          <select id="destination-code" name="destination" required [(ngModel)]="form.destination" (ngModelChange)="clearFeedback()" [disabled]="busy || loading">
+            <option [ngValue]="null" disabled>Choisir le destinataire</option>
+            @for (compte of comptes; track compte.numCompte) { <option [ngValue]="compte.numCompte" [disabled]="compte.numCompte === form.code">Compte n° {{ compte.numCompte }}</option> }
+          </select>
+        }
+
+        @if (operation !== 'getCompte' && operation !== 'supprimerCompte') {
+          <label for="operation-amount">{{ operation === 'creerCompte' ? 'Solde initial' : 'Montant' }}</label>
+          <div class="amount-field"><input id="operation-amount" [class.first-field]="operation === 'creerCompte' || operation === 'conversion'" name="montant" type="number" required step="0.01" [min]="operation === 'creerCompte' || operation === 'conversion' ? 0 : 0.01" placeholder="0,00" [(ngModel)]="form.montant" (ngModelChange)="clearFeedback()" [disabled]="busy" /><span>{{ operation === 'conversion' ? '× 3,5' : 'TND' }}</span></div>
+        }
+
+        @if (operation === 'supprimerCompte') {
+          <label class="delete-confirm"><input type="checkbox" name="confirmDelete" required [(ngModel)]="confirmDelete" [disabled]="busy" /><span>Je confirme la suppression définitive de ce compte.</span></label>
+        }
+
+        <button class="button primary submit-button" type="submit" [class.danger]="operation === 'supprimerCompte'" [disabled]="operationForm.invalid || busy || loading || !!connectionError">@if (busy) { <app-icon class="spinning" name="refresh" />Traitement… } @else { {{ info.button }}<app-icon name="arrow" /> }</button>
+
+        @if (formError) { <div class="feedback error" role="alert"><app-icon name="alert" /><p>{{ formError }}</p></div> }
+        @if (success) { <div class="feedback success" role="status"><app-icon name="check" /><p>{{ success }}</p></div> }
+        @if (accountResult; as compte) { <div class="result"><span>Compte n° {{ compte.numCompte }}</span><strong>{{ money(compte.solde) }} <small>TND</small></strong><p>Créé le {{ date(compte.dateCreation) }}</p></div> }
+        @if (numberResult !== null) { <div class="result" role="status"><span>Résultat de la conversion</span><strong>{{ money(numberResult!) }}</strong><p>{{ money(form.montant || 0) }} × 3,5</p></div> }
+      </form>
+    </section>
+  </div>
+  <footer><app-icon name="code" />Angular → {{ consumer.name }} → Service SOAP → MySQL</footer>
+</main>
